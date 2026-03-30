@@ -6,41 +6,13 @@ from sklearn.tree import DecisionTreeClassifier # Decision Tree Classifier
 from sklearn.ensemble import RandomForestClassifier # Random Forest Classifier
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, classification_report # Metrics for evaluation
 from sklearn.metrics import ConfusionMatrixDisplay
+from sklearn.model_selection import StratifiedKFold, cross_validate
 
 # imports to visualize tree
 from sklearn import tree as treeViz
 import graphviz
 import pydotplus
 from IPython.display import display
-
-def visualize_tree(model, max_depth=5):
-    """
-    Generate and return an image representing an Sklearn decision tree.
-
-    Each node in the visualization represents a node in the decision tree.
-    In addition, visualization for each node contains:
-        - The feature that is split on
-        - The entropy (of the outputs `t`) at the node
-        - The number of training samples at the node
-        - The number of training samples with true/false values
-        - The majority class (heart disease or not)
-    The colour of the node also shows the majority class and purity
-
-    See here: https://scikit-learn.org/stable/modules/generated/sklearn.tree.export_graphviz.html
-
-    Parameters:
-        `model` - An Sklearn decision tree model
-        `max_depth` - Max depth of decision tree to be rendered in the notebook.
-         This is useful since the tree can get very large if the max_depth is
-         set too high and thus making the resulting figure difficult to interpret.
-    """
-    dot_data = treeViz.export_graphviz(model,
-                                       feature_names=feature_names,
-                                       max_depth=max_depth,
-                                       class_names=["heart_no", "heart_yes"],
-                                       filled=True,
-                                       rounded=True)
-    return display(graphviz.Source(dot_data))
 
 # Load the training data
 data_train = pd.read_csv("data/train_norm.csv")
@@ -160,35 +132,68 @@ t_test = data_test.iloc[:, 1]  # Painting
 
 
 
-
-
-
-
-
 # Setup hyperparameters for decision tree
-tune_max_depth = [5]
+tune_max_depth = list(range(1, 11))
 tune_min_impurity_decrease = [0]
 tune_n_estimators = [100]
 
 models = []
+cv_splitter = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
 # Train and evaluate models for each combination of hyperparameters
 for max_depth in tune_max_depth:
     for min_impurity_decrease in tune_min_impurity_decrease:
         for n_estimators in tune_n_estimators:
             print(f"Training Random Forest with max_depth={max_depth}, min_impurity_decrease={min_impurity_decrease}, n_estimators={n_estimators}")
-            forest_model = RandomForestClassifier(criterion="entropy", max_depth=max_depth, min_impurity_decrease=min_impurity_decrease, n_estimators=n_estimators)
+            forest_model = RandomForestClassifier(
+                criterion="entropy",
+                max_depth=max_depth,
+                min_impurity_decrease=min_impurity_decrease,
+                n_estimators=n_estimators,
+                random_state=42,
+                n_jobs=-1,
+            )
+            cv_results = cross_validate(
+                forest_model,
+                X_train,
+                t_train,
+                cv=cv_splitter,
+                scoring={"accuracy": "accuracy", "macro_f1": "f1_macro"},
+                n_jobs=-1,
+            )
+            cv_mean_acc = cv_results["test_accuracy"].mean()
+            cv_std_acc = cv_results["test_accuracy"].std()
+            cv_mean_macro_f1 = cv_results["test_macro_f1"].mean()
+            cv_std_macro_f1 = cv_results["test_macro_f1"].std()
             forest_model.fit(X_train, t_train)
             train_acc = forest_model.score(X_train, t_train)
             valid_acc = forest_model.score(X_valid, t_valid)
-            models.append((forest_model, max_depth, min_impurity_decrease, n_estimators, train_acc, valid_acc))
+            train_macro_f1 = f1_score(t_train, forest_model.predict(X_train), average="macro")
+            valid_macro_f1 = f1_score(t_valid, forest_model.predict(X_valid), average="macro")
+            models.append((
+                forest_model,
+                max_depth,
+                min_impurity_decrease,
+                n_estimators,
+                train_acc,
+                valid_acc,
+                cv_mean_acc,
+                cv_std_acc,
+                train_macro_f1,
+                valid_macro_f1,
+                cv_mean_macro_f1,
+                cv_std_macro_f1,
+            ))
 
 
 # Print the training and validation accuracy
 for model in models:
     print(
         f"Model with max_depth={model[1]}, min_impurity_decrease={model[2]}, n_estimators={model[3]} "
-        f"has training accuracy: {model[4]} and validation accuracy: {model[5]}"
+        f"has training accuracy: {model[4]}, validation accuracy: {model[5]}, "
+        f"CV accuracy: {model[6]:.4f} +/- {model[7]:.4f}, "
+        f"training macro-F1: {model[8]:.4f}, validation macro-F1: {model[9]:.4f}, "
+        f"CV macro-F1: {model[10]:.4f} +/- {model[11]:.4f}"
     )
 
 
@@ -200,12 +205,19 @@ for model in models:
 
 
 
-# Accuracies of the forest model with the best validation accuracy
-best_model = max(models, key=lambda x: x[5])  # Get the model with the highest validation accuracy
+# Accuracies of the forest model with the best cross-validation accuracy
+best_model = max(models, key=lambda x: x[6])  # Get the model with the highest mean CV accuracy
 chosen_model = best_model[0]
+print("Chosen model hyperparameters (by CV):")
+print(f"max_depth={best_model[1]}, min_impurity_decrease={best_model[2]}, n_estimators={best_model[3]}")
+print(f"Mean CV Accuracy: {best_model[6]:.4f} +/- {best_model[7]:.4f}")
+print(f"Mean CV Macro-F1: {best_model[10]:.4f} +/- {best_model[11]:.4f}")
 print("Training Accuracy:", chosen_model.score(X_train, t_train))
 print("Validation Accuracy:", chosen_model.score(X_valid, t_valid))
 print("Test Accuracy:", chosen_model.score(X_test, t_test))
+print("Training Macro-F1:", f1_score(t_train, chosen_model.predict(X_train), average="macro"))
+print("Validation Macro-F1:", f1_score(t_valid, chosen_model.predict(X_valid), average="macro"))
+print("Test Macro-F1:", f1_score(t_test, chosen_model.predict(X_test), average="macro"))
 
 
 
@@ -228,8 +240,25 @@ results_df = pd.DataFrame(
         "n_estimators": [model[3] for model in models],
         "train_accuracy": [model[4] for model in models],
         "val_accuracy": [model[5] for model in models],
+        "cv_accuracy": [model[6] for model in models],
+        "train_macro_f1": [model[8] for model in models],
+        "val_macro_f1": [model[9] for model in models],
+        "cv_macro_f1": [model[10] for model in models],
     }
 )
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
