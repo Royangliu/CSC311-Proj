@@ -22,6 +22,27 @@ else:
 	CLASSES = None
 	TREES = FOREST_DATA
 
+# Train-split mean / population std (ddof=0) for columns 2,4,5,6,7,8,9,10 — same as data/normalize.py
+_FEATURE_MEANS = (
+	6.334375,
+	2.7198211624441133,
+	3.4172876304023845,
+	3.700447093889717,
+	2.4053651266766023,
+	3.825633383010432,
+	3.782089552238806,
+	4300023.769325337,
+)
+_FEATURE_STDS = (
+	2.11670507704416,
+	1.3894033600003164,
+	1.2983765304160497,
+	1.2418376519929453,
+	1.4339614475296873,
+	2.5228018588062273,
+	2.6760923490487234,
+	54001013.48960381,
+)
 
 def one_hot(
 	dataframe: pd.DataFrame,
@@ -116,6 +137,14 @@ def predict(row):
 	"""
 	# Extract the 22 features in the correct order
 	features = [row.iloc[col] for col in FEATURE_COLS]
+	# Z-score the eight numeric survey columns (indices 2,4–10) before tree traversal
+	for i in range(8):
+		x = features[i]
+		if pd.isna(x):
+			features[i] = 0.0
+			continue
+		m, s = _FEATURE_MEANS[i], _FEATURE_STDS[i]
+		features[i] = 0.0 if s == 0 else (float(x) - m) / s
 	return predict_one(features)
 
 # Note that the python translation of the forest may result in floating point errors that causes slight changes to class assignments for some edge cases. 
@@ -167,5 +196,3 @@ if __name__ == "__main__":
 	print(f"Correct: {correct}/{len(true_labels)}")
 	print(f"Percentage correct: {percentage_correct:.2f}%")
 	print(predictions)
-	
-
