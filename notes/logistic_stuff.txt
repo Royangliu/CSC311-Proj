@@ -1,0 +1,5 @@
+Refit on full train with lambda = 10 (CV-selected)
+Classes (macro-F1 over all): ['The Persistence of Memory', 'The Starry Night', 'The Water Lily Pond']
+Training Accuracy: 0.9657 | Macro F1: 0.9655
+Validation Accuracy: 0.8703 | Macro F1: 0.8696
+Test Accuracy: 0.8567 | Macro F1: 0.8551

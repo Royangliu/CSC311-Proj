@@ -1,0 +1,60 @@
+(.venv) jennazhang@Jennas-Air-4 CSC311-Proj % /Users/jennazhang/Documents/CSC311-Proj/.venv/bin/python
+ "/Users/jennazhang/Documents/CSC311-Proj/project_baseline (1).py"
+Splits (fixed CSVs: train_norm / val_norm / test_norm):
+  Train: 670 labelled rows | unique_id in file=231, among labelled rows=225
+  Val:   641 labelled rows | unique_id in file=231, among labelled rows=216
+  Test:  300 labelled rows | unique_id in file=100, among labelled rows=100
+(Labelled rows = non-missing Painting + both features; fewer rows/IDs than the full CSV if some ratings are empty.)
+Saved plot: /Users/jennazhang/Documents/CSC311-Proj/k_vs_val_loss.png
+k | val loss (1-acc)
+  1 | 0.5585
+  2 | 0.5055
+  3 | 0.6178
+  4 | 0.5445
+  5 | 0.5476
+  6 | 0.5335
+  7 | 0.5429
+  8 | 0.4353
+  9 | 0.4805
+ 10 | 0.4805
+ 11 | 0.4743
+ 12 | 0.4696
+ 13 | 0.4353
+ 14 | 0.4321
+ 15 | 0.4353
+ 16 | 0.4368
+ 17 | 0.4415
+ 18 | 0.4384
+ 19 | 0.4399
+ 20 | 0.4524
+ 21 | 0.4524
+ 22 | 0.4524
+ 23 | 0.4524
+ 24 | 0.4477
+ 25 | 0.4524
+ 26 | 0.4524
+ 27 | 0.4524
+ 28 | 0.4524
+ 29 | 0.4524
+ 30 | 0.4758
+k with minimum validation loss in this sweep: 14
+
+Using SELECTED_K = 4
+Classes (macro-F1 over all): ['The Persistence of Memory', 'The Starry Night', 'The Water Lily Pond']
+Training Accuracy: 0.6284 | Macro F1: 0.6090
+Validation Accuracy: 0.4555 | Macro F1: 0.4319
+Test Accuracy: 0.5400 | Macro F1: 0.5367
+
+Using SELECTED_K = 8
+Classes (macro-F1 over all): ['The Persistence of Memory', 'The Starry Night', 'The Water Lily Pond']
+Training Accuracy: 0.6716 | Macro F1: 0.6689
+Validation Accuracy: 0.5647 | Macro F1: 0.5565
+Test Accuracy: 0.6067 | Macro F1: 0.6016
+
+Using SELECTED_K = 13
+Classes (macro-F1 over all): ['The Persistence of Memory', 'The Starry Night', 'The Water Lily Pond']
+Training Accuracy: 0.6881 | Macro F1: 0.6881
+Validation Accuracy: 0.5647 | Macro F1: 0.5580
+Test Accuracy: 0.6100 | Macro F1: 0.6069
+
+SELECT K = 13, 8 was probably random, also macro f1 is better on k=13 anyways
