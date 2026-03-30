@@ -39,6 +39,17 @@ def normalize_column(dataframe: pd.DataFrame, column_index: int) -> pd.Series:
 	return (series - mean) / std
 
 
+def normalize_with_params(series: pd.Series, mean: float, std: float, column_name: str) -> pd.Series:
+	"""Apply z-score normalization using externally provided mean and std."""
+	if pd.isna(mean) or pd.isna(std):
+		return pd.Series(np.nan, index=series.index, name=column_name)
+
+	if std == 0:
+		return pd.Series(0.0, index=series.index, name=column_name)
+
+	return ((series - mean) / std).rename(column_name)
+
+
 def plot_value_counts(dataframe: pd.DataFrame, column_index: int) -> None:
 	"""Plot value counts for a DataFrame column by index."""
 	column_name = dataframe.columns[column_index]
@@ -86,25 +97,29 @@ def one_hot(
 	return dummies
 
 # import csv into pandas dataframe
-df = pd.read_csv('data/training_data_202601_trainval.csv')
-df_p = pd.read_csv('data/training_data_202601_trainval_pers.csv')
-df_s = pd.read_csv('data/training_data_202601_trainval_star.csv')
+# df = pd.read_csv('data/training_data_202601_trainval.csv')
+# df_p = pd.read_csv('data/training_data_202601_trainval_pers.csv')
+# df_s = pd.read_csv('data/training_data_202601_trainval_star.csv')
 
-df_train = pd.read_csv('data/training_data_202601_train.csv')
-df_val = pd.read_csv('data/training_data_202601_val.csv')
-df_test = pd.read_csv('data/training_data_202601_test.csv')
+df_train = pd.read_csv('training_data_202601_train.csv')
+df_val = pd.read_csv('training_data_202601_val.csv')
+df_test = pd.read_csv('training_data_202601_test.csv')
 
 
-# Normalize columns 2, 4, 5, 6, 7, 8, 9, and 10 for train, val, and test datasets
+# Normalize columns 2, 4, 5, 6, 7, 8, 9, and 10 using train-set stats for all splits
 for col_index in [2, 4, 5, 6, 7, 8, 9, 10]:
 	column_name = df_train.columns[col_index]
-	df_train[column_name] = normalize_column(df_train, col_index)
+	train_series = extract_numeric_column(df_train, col_index)
+	train_mean = train_series.mean(skipna=True)
+	train_std = train_series.std(skipna=True, ddof=0)
 
-	column_name = df_val.columns[col_index]
-	df_val[column_name] = normalize_column(df_val, col_index)
+	df_train[column_name] = normalize_with_params(train_series, train_mean, train_std, column_name)
 
-	column_name = df_test.columns[col_index]
-	df_test[column_name] = normalize_column(df_test, col_index)
+	val_series = extract_numeric_column(df_val, col_index)
+	df_val[column_name] = normalize_with_params(val_series, train_mean, train_std, column_name)
+
+	test_series = extract_numeric_column(df_test, col_index)
+	df_test[column_name] = normalize_with_params(test_series, train_mean, train_std, column_name)
 
 # Save the normalized datasets to new CSV files
 df_train.to_csv("train_norm.csv", index=False)
