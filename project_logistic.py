@@ -95,6 +95,10 @@ def main():
     (X_test, y_test, n_test, test_ids_file, test_ids_model) = _load_xy(
         TEST_NORM_PATH, feature_cols
     )
+    
+    X_trainval = np.vstack([X_train, X_val])
+    y_trainval = np.concatenate([y_train, y_val])
+    n_trainval = len(y_trainval)
 
     class_labels = np.unique(np.concatenate([y_train, y_val, y_test]))
 
@@ -114,6 +118,7 @@ def main():
         f"  Val:   {n_val} labelled rows | unique_id in file={val_ids_file}, "
         f"among labelled rows={val_ids_model}"
     )
+    print(f"  Train+Val merged: {n_trainval} labelled rows (used for CV + refit)")
     print(
         f"  Test:  {n_test} labelled rows | unique_id in file={test_ids_file}, "
         f"among labelled rows={test_ids_model}"
@@ -137,8 +142,8 @@ def main():
         )
         out = cross_validate(
             model,
-            X_train,
-            y_train,
+            X_trainval,
+            y_trainval,
             cv=cv,
             scoring=["accuracy", "f1_macro"],
         )
@@ -154,13 +159,13 @@ def main():
     else:
         raise ValueError("CV_SELECT_METRIC must be 'accuracy' or 'f1_macro'")
 
-    best_lambda = 10
-    best_C = 1.0 / best_lambda
     best_acc_idx = int(np.argmax(cv_acc_mean))
     best_f1_idx = int(np.argmax(cv_f1_mean))
+    best_lambda = LAMBDAS[best_idx]
+    best_C = 1.0 / best_lambda
 
     print(
-        "\nCross-val on train (StratifiedKFold): mean accuracy & macro F1 "
+        "\nCross-val on train+val (StratifiedKFold): mean accuracy & macro F1 "
         "(same folds for both)"
     )
     print("lambda | C      | mean acc ± std    | mean f1_macro ± std")
@@ -180,6 +185,17 @@ def main():
     print(f"Best lambda by CV macro F1:  {LAMBDAS[best_f1_idx]} (mean F1  {cv_f1_mean[best_f1_idx]:.4f})")
     print(
         f"\nRefit uses lambda = {best_lambda} (highest CV {CV_SELECT_METRIC}; C = {best_C:g})"
+    )
+    if CV_SELECT_METRIC == "accuracy":
+        best_cv_mean = cv_acc_mean[best_idx]
+        best_cv_std = cv_acc_std[best_idx]
+        best_cv_label = "mean CV accuracy"
+    else:
+        best_cv_mean = cv_f1_mean[best_idx]
+        best_cv_std = cv_f1_std[best_idx]
+        best_cv_label = "mean CV macro-F1"
+    print(
+        f"Best λ CV summary: {best_cv_label} = {best_cv_mean:.4f} ± {best_cv_std:.4f}"
     )
 
     fig, ax = plt.subplots(figsize=(8, 4.5))
@@ -204,7 +220,9 @@ def main():
     ax.set_xticklabels([str(l) for l in LAMBDAS])
     ax.set_xlabel("lambda (L2)")
     ax.set_ylabel("Mean CV score")
-    ax.set_title(f"Logistic L2: all {len(feature_cols)} numeric train_norm features")
+    ax.set_title(
+        f"Logistic L2: all {len(feature_cols)} numeric train_norm+val_norm features"
+    )
     ax.legend(loc="best")
     ax.grid(True, alpha=0.3)
     plot_path = os.path.join(ROOT_DIR, "logistic_lambda_cv.png")
@@ -219,6 +237,8 @@ def main():
         solver="lbfgs",
         max_iter=5000,
     )
+    # Refit using ONLY the official training split, even though the best
+    # lambda/C was selected via CV on the merged train+val set.
     final_clf.fit(X_train, y_train)
 
     train_acc = final_clf.score(X_train, y_train)
