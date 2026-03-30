@@ -46,8 +46,7 @@ FEATURE_COLS = [INTENSITY_COL] + LIKERT_COLS + [COLOURS_COL, OBJECTS_COL]
 SELECTED_K = 19
 K_MAX = 30
 
-# sklearn: "uniform" | "distance". Compare both on the plot; set this for final metrics.
-NEIGHBOR_WEIGHTS = "distance"
+NEIGHBOR_WEIGHTS = "uniform"
 _WEIGHT_CHOICES = ("uniform", "distance")
 
 
