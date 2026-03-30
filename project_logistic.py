@@ -30,12 +30,11 @@ FEATURE_COLS = [
     "This art piece makes me feel uneasy.",
 ]
 
-# L2 regularization strengths (interpret as penalty weight on ||w||^2); CV picks the best.
+# testing the L2 regularization strength 
 LAMBDAS = [0.01, 0.1, 1.0, 10.0]
 
 CV_SPLITS = 5
-# Which CV metric selects lambda for the final refit on train
-CV_SELECT_METRIC = "f1_macro"  # or "accuracy"
+CV_SELECT_METRIC = "f1_macro"
 RNG = 42
 
 
