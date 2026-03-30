@@ -18,6 +18,7 @@ FEATURE_COLS = [
 ]
 TARGET_COL = 1
 
+# FEATURE_COLS += (list(range (30, 3554)))  # Add all BOW features (assuming they are from index 30 to 3553)
 
 def build_features(df: pd.DataFrame) -> np.ndarray:
 	return np.stack([df.iloc[:, col] for col in FEATURE_COLS], axis=1)
@@ -47,8 +48,8 @@ def main() -> None:
 
 	cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 	param_grid = {
-		"n_estimators": [300, 400, 500],
-		"max_depth": [7, 8, 9, 10],
+		"n_estimators": [300],
+		"max_depth": [9],
 		"min_samples_split": [2],
 		"min_samples_leaf": [2],
 		"max_features": ["sqrt"],
