@@ -28,8 +28,10 @@ def main() -> None:
 	val_df = pd.read_csv("data/val_norm.csv")
 	test_df = pd.read_csv("data/test_norm.csv")
 
-	x_train = build_features(train_df)
-	y_train = train_df.iloc[:, TARGET_COL]
+	train_val_df = pd.concat([train_df, val_df], ignore_index=True)
+
+	x_train = build_features(train_val_df)
+	y_train = train_val_df.iloc[:, TARGET_COL]
 
 	x_val = build_features(val_df)
 	y_val = val_df.iloc[:, TARGET_COL]
@@ -63,6 +65,13 @@ def main() -> None:
 	)
 	search.fit(x_train, y_train)
 	model = search.best_estimator_
+	best_idx = search.best_index_
+	best_cv_mean = search.cv_results_["mean_test_score"][best_idx]
+	best_cv_std = search.cv_results_["std_test_score"][best_idx]
+	best_fold_scores = [
+		search.cv_results_[f"split{i}_test_score"][best_idx]
+		for i in range(cv.get_n_splits())
+	]
 
 	model.fit(x_train, y_train)
 
@@ -72,7 +81,9 @@ def main() -> None:
 
 	print("RandomForest trained with feature columns:", FEATURE_COLS)
 	print("Best Params:", search.best_params_)
-	print(f"Best 5-Fold CV Macro-F1: {search.best_score_:.4f}")
+	print(f"Best 5-Fold CV Accuracy (mean): {best_cv_mean:.4f}")
+	print(f"Best 5-Fold CV Accuracy (std):  {best_cv_std:.4f}")
+	print("Best 5-Fold CV fold scores:", [f"{score:.4f}" for score in best_fold_scores])
 	print(f"Train Accuracy: {accuracy_score(y_train, train_pred):.4f}")
 	print(f"Val Accuracy:   {accuracy_score(y_val, val_pred):.4f}")
 	print(f"Test Accuracy:  {accuracy_score(y_test, test_pred):.4f}")
@@ -93,7 +104,7 @@ def main() -> None:
 	plt.figure()
 	disp = ConfusionMatrixDisplay(confusion_matrix=test_conf_matrix, display_labels=["Persistence", "Starry Night", "Water Lilies"])
 	disp.plot(cmap="Blues", values_format="d")
-	plt.title("Test Confusion Matrix (Random Forest)")
+	plt.title("Test Confusion Matrix (Random Forest Seed=42)")
 	plt.tight_layout()
 	plt.savefig(plots_dir / "test_confusion_matrix.png", dpi=300)
 	plt.show()
