@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import os
 
 
 def extract_numeric_column(dataframe: pd.DataFrame, column_index: int) -> pd.Series:
@@ -15,6 +16,24 @@ def extract_numeric_column(dataframe: pd.DataFrame, column_index: int) -> pd.Ser
 	series = dataframe.iloc[:, column_index].astype(str)
 	extracted = series.str.extract(r"([-+]?\d*\.?\d+)", expand=False)
 	return pd.to_numeric(extracted, errors="coerce").rename(column_name)
+
+
+def replace_column_with_numeric(
+	dataframe: pd.DataFrame,
+	column_index: int,
+	inplace: bool = False,
+) -> pd.DataFrame:
+	"""Replace a column with extract_numeric_column output and return the updated DataFrame."""
+	if not isinstance(column_index, int):
+		raise TypeError("column_index must be an integer.")
+
+	if column_index < -dataframe.shape[1] or column_index >= dataframe.shape[1]:
+		raise IndexError(f"Column index {column_index} is out of range.")
+
+	column_name = dataframe.columns[column_index]
+	target_df = dataframe if inplace else dataframe.copy()
+	target_df[column_name] = extract_numeric_column(dataframe, column_index)
+	return target_df
 
 
 def normalize_column(dataframe: pd.DataFrame, column_index: int) -> pd.Series:
@@ -96,6 +115,8 @@ def one_hot(
 
 	return dummies
 
+os.chdir("data")
+
 # import csv into pandas dataframe
 # df = pd.read_csv('data/training_data_202601_trainval.csv')
 # df_p = pd.read_csv('data/training_data_202601_trainval_pers.csv')
@@ -106,55 +127,34 @@ df_val = pd.read_csv('training_data_202601_val.csv')
 df_test = pd.read_csv('training_data_202601_test.csv')
 
 
-# Normalize columns 2, 4, 5, 6, 7, 8, 9, and 10 using train-set stats for all splits
-for col_index in [2, 4, 5, 6, 7, 8, 9, 10]:
-	column_name = df_train.columns[col_index]
-	train_series = extract_numeric_column(df_train, col_index)
-	train_mean = train_series.mean(skipna=True)
-	train_std = train_series.std(skipna=True, ddof=0)
+# # Normalize columns 2, 4, 5, 6, 7, 8, 9, and 10 using train-set stats for all splits
+# for col_index in [2, 4, 5, 6, 7, 8, 9, 10]:
+# 	column_name = df_train.columns[col_index]
+# 	train_series = extract_numeric_column(df_train, col_index)
+# 	train_mean = train_series.mean(skipna=True)
+# 	train_std = train_series.std(skipna=True, ddof=0)
 
-	df_train[column_name] = normalize_with_params(train_series, train_mean, train_std, column_name)
+# 	df_train[column_name] = normalize_with_params(train_series, train_mean, train_std, column_name)
 
-	val_series = extract_numeric_column(df_val, col_index)
-	df_val[column_name] = normalize_with_params(val_series, train_mean, train_std, column_name)
+# 	val_series = extract_numeric_column(df_val, col_index)
+# 	df_val[column_name] = normalize_with_params(val_series, train_mean, train_std, column_name)
 
-	test_series = extract_numeric_column(df_test, col_index)
-	df_test[column_name] = normalize_with_params(test_series, train_mean, train_std, column_name)
+# 	test_series = extract_numeric_column(df_test, col_index)
+# 	df_test[column_name] = normalize_with_params(test_series, train_mean, train_std, column_name)
 
-# Save the normalized datasets to new CSV files
-df_train.to_csv("train_norm.csv", index=False)
-df_val.to_csv("val_norm.csv", index=False)
-df_test.to_csv("test_norm.csv", index=False)
+# # Save the normalized datasets to new CSV files
+# df_train.to_csv("train_norm.csv", index=False)
+# df_val.to_csv("val_norm.csv", index=False)
+# df_test.to_csv("test_norm.csv", index=False)
 
 # Create new columns for one-hot encoding of columns 11, 12, and 13 in the training dataset
-room_categories = sorted(
-	{
-		item
-		for value in df_train.iloc[:, 11].dropna().astype(str)
-		for item in value.split(",")
-		if item
-	}
-)
+room_categories = sorted(["Bathroom", "Bedroom", "Dining room", "Living room", "Office"])
 
-view_categories = sorted(
-	{
-		item
-		for value in df_train.iloc[:, 12].dropna().astype(str)
-		for item in value.split(",")
-		if item
-	}
-)
+view_categories = sorted(["By yourself", "Coworkers/Classmates", "Family members", "Friends", "Strangers"])
 
-season_categories = sorted(
-	{
-		item
-		for value in df_train.iloc[:, 13].dropna().astype(str)
-		for item in value.split(",")
-		if item
-	}
-)
+season_categories = sorted(["Fall", "Spring", "Summer", "Winter"])
 
-# Apply one-hot encoding to columns 11, 12, and 13 for train, val, and test datasets
+# # Apply one-hot encoding to columns 11, 12, and 13 for train, val, and test datasets
 for data in [df_train, df_val, df_test]:
 	room_ohe = one_hot(data, 11, room_categories, prefix="room")
 	view_ohe = one_hot(data, 12, view_categories, prefix="view")
@@ -168,17 +168,20 @@ for data in [df_train, df_val, df_test]:
 	elif data is df_test:
 		df_test = pd.concat([data, room_ohe, view_ohe, season_ohe], axis=1)
 
-	# Optional: drop original multi-label string columns after encoding.
-	# data = data.drop(data.columns[[11, 12, 13]], axis=1)
-
-df_train.to_csv("train_norm.csv", index=False)
-df_val.to_csv("val_norm.csv", index=False)
-df_test.to_csv("test_norm.csv", index=False)
+# 	# Optional: drop original multi-label string columns after encoding.
+# 	# data = data.drop(data.columns[[11, 12, 13]], axis=1)
 
 
 
+for col_index in [4, 5, 6, 7, 10]:
+	for data in [df_train, df_val, df_test]:
+		data = replace_column_with_numeric(data, col_index, inplace=True)
 
 
+
+df_train.to_csv("train.csv", index=False)
+df_val.to_csv("val.csv", index=False)
+df_test.to_csv("test.csv", index=False)
 
 
 # print(df.iloc[:, [4, 5, 6, 7]]) 
