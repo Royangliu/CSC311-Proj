@@ -18,6 +18,8 @@ FEATURE_COLS = [
 ]
 TARGET_COL = 1
 
+SEED = 42
+
 # FEATURE_COLS += (list(range (30, 3554)))  # Add all BOW features (assuming they are from index 30 to 3553)
 
 def build_features(df: pd.DataFrame) -> np.ndarray:
@@ -25,9 +27,14 @@ def build_features(df: pd.DataFrame) -> np.ndarray:
 
 
 def main() -> None:
-	train_df = pd.read_csv("data/train_norm.csv")
-	val_df = pd.read_csv("data/val_norm.csv")
-	test_df = pd.read_csv("data/test_norm.csv")
+	train_df = pd.read_csv("data/train_with_bow.csv")
+	val_df = pd.read_csv("data/val_with_bow.csv")
+	test_df = pd.read_csv("data/test_with_bow.csv")
+
+	# delete rows with missing target labels in sets
+	train_df = train_df.dropna()
+	val_df = val_df.dropna()
+	# test_df = test_df.dropna()
 
 	train_val_df = pd.concat([train_df, val_df], ignore_index=True)
 
@@ -42,14 +49,14 @@ def main() -> None:
 
 	base_model = RandomForestClassifier(
 		criterion="entropy",
-		random_state=42,
+		random_state=SEED,
 		n_jobs=-1,
 	)
 
-	cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+	cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=SEED)
 	param_grid = {
-		"n_estimators": [300],
-		"max_depth": [9],
+		"n_estimators": [250],
+		"max_depth": [7],
 		"min_samples_split": [2],
 		"min_samples_leaf": [2],
 		"max_features": ["sqrt"],
@@ -102,7 +109,7 @@ def main() -> None:
 	plots_dir = Path("plots")
 	plots_dir.mkdir(parents=True, exist_ok=True)
 
-	plt.figure()
+	# plt.figure()
 	disp = ConfusionMatrixDisplay(confusion_matrix=test_conf_matrix, display_labels=["Persistence", "Starry Night", "Water Lilies"])
 	disp.plot(cmap="Blues", values_format="d")
 	plt.title("Test Confusion Matrix (Random Forest Seed=42)")
@@ -126,8 +133,14 @@ def main() -> None:
 
 		forest.append(tree_dict)
 
-	with open("forest.json", "w") as f:
-		json.dump(forest, f)
+	payload = {
+		"feature_cols": FEATURE_COLS,
+		"classes": model.classes_.tolist(),
+		"trees": forest,
+	}
+
+	with open("forest.json", "w", encoding="utf-8") as f:
+		json.dump(payload, f)
 
 
 if __name__ == "__main__":

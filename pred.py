@@ -2,16 +2,28 @@ import json
 import pandas as pd
 
 # Load forest from JSON
-with open("forest.json", "r") as f:
+with open("forest.json", "r", encoding="utf-8") as f:
 	FOREST_DATA = json.load(f)
 
 # Backward compatibility:
 # - New format: {"feature_cols": [...], "classes": [...], "trees": [...]}
 # - Old format: [{"feature": ..., "left": ..., "right": ..., "value": ...}, ...]
 if isinstance(FOREST_DATA, dict):
+	required_keys = {"feature_cols", "classes", "trees"}
+	missing = required_keys - set(FOREST_DATA.keys())
+	if missing:
+		raise ValueError(f"forest.json is missing required keys: {sorted(missing)}")
+
 	FEATURE_COLS = FOREST_DATA["feature_cols"]
 	CLASSES = FOREST_DATA["classes"]
 	TREES = FOREST_DATA["trees"]
+
+	if not isinstance(FEATURE_COLS, list) or not FEATURE_COLS:
+		raise ValueError("forest.json key 'feature_cols' must be a non-empty list")
+	if not isinstance(CLASSES, list) or not CLASSES:
+		raise ValueError("forest.json key 'classes' must be a non-empty list")
+	if not isinstance(TREES, list) or not TREES:
+		raise ValueError("forest.json key 'trees' must be a non-empty list")
 else:
 	FEATURE_COLS = [
 		2, 4, 5, 6, 7, 8, 9, 10,
@@ -22,27 +34,29 @@ else:
 	CLASSES = None
 	TREES = FOREST_DATA
 
-# Train-split mean / population std (ddof=0) for columns 2,4,5,6,7,8,9,10 — same as data/normalize.py
-_FEATURE_MEANS = (
-	6.334375,
-	2.7198211624441133,
-	3.4172876304023845,
-	3.700447093889717,
-	2.4053651266766023,
-	3.825633383010432,
-	3.782089552238806,
-	4300023.769325337,
-)
-_FEATURE_STDS = (
-	2.11670507704416,
-	1.3894033600003164,
-	1.2983765304160497,
-	1.2418376519929453,
-	1.4339614475296873,
-	2.5228018588062273,
-	2.6760923490487234,
-	54001013.48960381,
-)
+# # Train-split mean / population std (ddof=0) for columns 2,4,5,6,7,8,9,10 — same as data/normalize.py
+# _FEATURE_MEANS = (
+# 	6.334375,
+# 	2.7198211624441133,
+# 	3.4172876304023845,
+# 	3.700447093889717,
+# 	2.4053651266766023,
+# 	3.825633383010432,
+# 	3.782089552238806,
+# 	4300023.769325337,
+# )
+# _FEATURE_STDS = (
+# 	2.11670507704416,
+# 	1.3894033600003164,
+# 	1.2983765304160497,
+# 	1.2418376519929453,
+# 	1.4339614475296873,
+# 	2.5228018588062273,
+# 	2.6760923490487234,
+# 	54001013.48960381,
+# )
+_FEATURE_MEANS = None
+_FEATURE_STDS = None
 
 def one_hot(
 	dataframe: pd.DataFrame,
@@ -114,6 +128,18 @@ def _traverse_tree(tree, features):
 	return leaf_votes
 
 
+# def normalize_with_params(series: pd.Series, mean: float, std: float, column_name: str) -> pd.Series:
+# 	"""Apply z-score normalization using externally provided mean and std."""
+# 	if pd.isna(mean) or pd.isna(std):
+# 		return pd.Series(np.nan, index=series.index, name=column_name)
+
+# 	if std == 0:
+# 		return pd.Series(0.0, index=series.index, name=column_name)
+
+# 	return ((series - mean) / std).rename(column_name)
+
+
+
 def predict_one(row_features):
 	"""
 	Predict class for a single feature vector (already extracted).
@@ -137,14 +163,15 @@ def predict(row):
 	"""
 	# Extract the 22 features in the correct order
 	features = [row.iloc[col] for col in FEATURE_COLS]
-	# Z-score the eight numeric survey columns (indices 2,4–10) before tree traversal
-	for i in range(8):
-		x = features[i]
-		if pd.isna(x):
-			features[i] = 0.0
-			continue
-		m, s = _FEATURE_MEANS[i], _FEATURE_STDS[i]
-		features[i] = 0.0 if s == 0 else (float(x) - m) / s
+	if _FEATURE_MEANS is not None and _FEATURE_STDS is not None:
+		# Z-score the eight numeric survey columns (indices 2,4-10) before tree traversal.
+		for i in range(8):
+			x = features[i]
+			if pd.isna(x):
+				features[i] = 0.0
+				continue
+			m, s = _FEATURE_MEANS[i], _FEATURE_STDS[i]
+			features[i] = 0.0 if s == 0 else (float(x) - m) / s
 	return predict_one(features)
 
 # Note that the python translation of the forest may result in floating point errors that causes slight changes to class assignments for some edge cases. 
@@ -195,4 +222,4 @@ if __name__ == "__main__":
 
 	print(f"Correct: {correct}/{len(true_labels)}")
 	print(f"Percentage correct: {percentage_correct:.2f}%")
-	print(predictions)
+	# print(predictions)
