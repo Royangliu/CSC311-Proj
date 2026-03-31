@@ -1,4 +1,5 @@
 import json
+import re
 import pandas as pd
 
 # Load forest from JSON
@@ -57,6 +58,42 @@ else:
 # )
 _FEATURE_MEANS = None
 _FEATURE_STDS = None
+
+EXPECTED_LABELS = [
+	"The Persistence of Memory",
+	"The Starry Night",
+	"The Water Lily Pond",
+]
+
+LABEL_ALIASES = {
+	"persistence": "The Persistence of Memory",
+	"the persistence of memory": "The Persistence of Memory",
+	"starry night": "The Starry Night",
+	"the starry night": "The Starry Night",
+	"water lilies": "The Water Lily Pond",
+	"water lily pond": "The Water Lily Pond",
+	"the water lily pond": "The Water Lily Pond",
+}
+
+
+def _looks_like_target_label(value) -> bool:
+	"""Return True if a value appears to be one of the three target labels."""
+	if pd.isna(value):
+		return False
+	key = str(value).strip().lower()
+	return key in LABEL_ALIASES
+
+
+def _infer_index_shift(df: pd.DataFrame) -> int:
+	"""Infer positional index shift: -1 when target column is omitted, otherwise 0."""
+	if df.shape[1] <= 1:
+		return -1
+
+	# If column 1 looks like class labels, keep original training indices.
+	sample = df.iloc[:, 1].dropna().head(25)
+	if not sample.empty and any(_looks_like_target_label(v) for v in sample):
+		return 0
+	return -1
 
 def one_hot(
 	dataframe: pd.DataFrame,
@@ -156,13 +193,44 @@ def predict_one(row_features):
 	return CLASSES[best_idx]
 
 
-def predict(row):
+def _coerce_feature_value(value):
+	"""Convert a feature value to float, defaulting to 0.0 for missing/unparseable values."""
+	if pd.isna(value):
+		return 0.0
+	if isinstance(value, (int, float)):
+		return float(value)
+	text = str(value).strip()
+	if not text:
+		return 0.0
+	try:
+		return float(text)
+	except ValueError:
+		match = re.search(r"[-+]?\d*\.?\d+", text)
+		return float(match.group(0)) if match else 0.0
+
+
+def _normalize_label(label):
+	"""Map legacy/variant labels to the checker's canonical labels."""
+	key = str(label).strip().lower()
+	return LABEL_ALIASES.get(key, label)
+
+
+def predict(row, feature_cols=None):
 	"""
 	Helper function to make prediction for a given input row.
 	Extracts features from the raw row and calls predict_one.
 	"""
-	# Extract the 22 features in the correct order
-	features = [row.iloc[col] for col in FEATURE_COLS]
+	if feature_cols is None:
+		feature_cols = FEATURE_COLS
+
+	# Robust extraction: if model expects columns not present in the input row, use 0.0.
+	features = []
+	num_cols = len(row)
+	for col in feature_cols:
+		if isinstance(col, int) and -num_cols <= col < num_cols:
+			features.append(_coerce_feature_value(row.iloc[col]))
+		else:
+			features.append(0.0)
 	if _FEATURE_MEANS is not None and _FEATURE_STDS is not None:
 		# Z-score the eight numeric survey columns (indices 2,4-10) before tree traversal.
 		for i in range(8):
@@ -172,7 +240,7 @@ def predict(row):
 				continue
 			m, s = _FEATURE_MEANS[i], _FEATURE_STDS[i]
 			features[i] = 0.0 if s == 0 else (float(x) - m) / s
-	return predict_one(features)
+	return _normalize_label(predict_one(features))
 
 # Note that the python translation of the forest may result in floating point errors that causes slight changes to class assignments for some edge cases. 
 def predict_all(filename):
@@ -183,9 +251,17 @@ def predict_all(filename):
 
 	# Read the file containing the test data
 	df = pd.read_csv(filename)
+	index_shift = _infer_index_shift(df)
+	effective_feature_cols = [
+		col + index_shift if isinstance(col, int) and col >= 2 else col
+		for col in FEATURE_COLS
+	]
 	if CLASSES is None:
-		# Match sklearn's class ordering (sorted unique labels) for legacy forest files.
-		CLASSES = sorted(df.iloc[:, 1].unique().tolist())
+		# Legacy forest format fallback when class names are not stored in forest.json.
+		if index_shift == 0:
+			CLASSES = sorted(df.iloc[:, 1].dropna().unique().tolist())
+		else:
+			CLASSES = EXPECTED_LABELS.copy()
 
 	room_categories = sorted(["Bathroom", "Bedroom", "Dining room", "Living room", "Office"])
 
@@ -194,18 +270,19 @@ def predict_all(filename):
 	season_categories = sorted(["Fall", "Spring", "Summer", "Winter"])
 
 	# Apply multi-hot encoding to columns 11, 12, and 13 for train, val, and test datasets
-	room_ohe = one_hot(df, 11, room_categories, prefix="room")
-	view_ohe = one_hot(df, 12, view_categories, prefix="view")
-	season_ohe = one_hot(df, 13, season_categories, prefix="season")
+	room_ohe = one_hot(df, 11 + index_shift, room_categories, prefix="room")
+	view_ohe = one_hot(df, 12 + index_shift, view_categories, prefix="view")
+	season_ohe = one_hot(df, 13 + index_shift, season_categories, prefix="season")
 
 	df = pd.concat([df, room_ohe, view_ohe, season_ohe], axis=1)
 
-	for col_index in [4, 5, 6, 7, 10]:
-		df = replace_column_with_numeric(df, col_index, inplace=True)
+	for col_index in [4 + index_shift, 5 + index_shift, 6 + index_shift, 7 + index_shift, 10 + index_shift]:
+		if -df.shape[1] <= col_index < df.shape[1]:
+			df = replace_column_with_numeric(df, col_index, inplace=True)
 
 	predictions = []
 	for idx, row in df.iterrows():
-		pred = predict(row)
+		pred = predict(row, feature_cols=effective_feature_cols)
 		predictions.append(pred)
 
 	return predictions
